@@ -6,18 +6,19 @@ create table audit.history
     ts               timestamp default now(),
     client_addr      inet,
     client_port      int,
-    schema_name      text not null,
-    table_name       text not null,
-    operation        text not null,
+    schema_name      text  not null,
+    table_name       text  not null,
+    operation        text  not null,
     user_name        text,
     application_name text,
     query            text,
     row_id           text,
     row              jsonb not null,
-    changes          jsonb
+    changes          jsonb,
+    context          jsonb
 );
 
-create index history_row_id_idx on audit.history(row_id);
+create index history_row_id_idx on audit.history (row_id);
 
 comment on table audit.history is 'History of operations on audited tables from audit.change_trigger() trigger function.';
 comment on column audit.history.event_id is 'Unique identifier for each audit row';
@@ -33,6 +34,7 @@ comment on column audit.history.query is 'Query that caused the row to be audite
 comment on column audit.history.row_id is 'Likely audited row primary key';
 comment on column audit.history.row is 'Record value';
 comment on column audit.history.changes is 'New values of fields changed by UPDATE operations. null for INSERT and DELETE';
+comment on column audit.history.context is 'Transaction-level context provided by the application via set_config';
 
 create or replace function audit.change_trigger() returns trigger as
 $$
@@ -40,14 +42,15 @@ begin
     if tg_op = 'INSERT'
     then
         insert into audit.history (client_addr, client_port, schema_name, table_name, operation, user_name,
-                                   application_name, query, row, row_id)
+                                   application_name, query, row, row_id, context)
         values (inet_client_addr(), inet_client_port(), tg_table_schema, tg_table_name, tg_op, session_user::text,
-                current_setting('application_name'), current_query(), row_to_json(new), new.id::text);
+                current_setting('application_name'), current_query(), row_to_json(new), new.id::text,
+                current_setting('audit.app_context', true)::jsonb);
         return new;
     elsif tg_op = 'UPDATE'
     then
         insert into audit.history (client_addr, client_port, schema_name, table_name, operation, user_name,
-                                   application_name, query, row, changes, row_id)
+                                   application_name, query, row, changes, row_id, context)
         values (inet_client_addr(), inet_client_port(), tg_table_schema, tg_table_name, tg_op, session_user::text,
                 current_setting('application_name'), current_query(),
                 row_to_json(old), (select jsonb_object_agg(tmp_new_row.key, tmp_new_row.value)
@@ -55,16 +58,16 @@ begin
                                             join jsonb_each_text(row_to_json(old)::jsonb) as tmp_old_row
                                                  on (tmp_new_row.key = tmp_old_row.key and
                                                      tmp_new_row.value is distinct from tmp_old_row.value)),
-                new.id::text);
+                new.id::text, current_setting('audit.app_context', true)::jsonb);
         return new;
     elsif tg_op = 'DELETE'
     then
         insert into audit.history (client_addr, client_port, schema_name, table_name, operation, user_name,
-                                   application_name, query, row, row_id)
+                                   application_name, query, row, row_id, context)
         values (inet_client_addr(), inet_client_port(), tg_table_schema, tg_table_name, tg_op, session_user::text,
                 current_setting('application_name'),
                 current_query(),
-                row_to_json(old), old.id::text);
+                row_to_json(old), old.id::text, current_setting('audit.app_context', true)::jsonb);
         return old;
     end if;
 end;
