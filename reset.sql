@@ -1,5 +1,5 @@
 drop table if exists audit.history;
-drop table test;
-drop table other_test;
+drop table audit_test.customers;
+drop table audit_test.addresses;
 
 
