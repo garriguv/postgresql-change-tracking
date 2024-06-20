@@ -54,7 +54,7 @@ $$
 
 create or replace function audit.strip_context(query text) returns text as
 $$
-select concat(split_part($1, '/*_audit ', 1), split_part($1, ' _audit*/ ', 2));
+select concat(split_part($1, '/*_audit ', 1), split_part($1, ' _audit*/', 2));
 $$
     language sql
     security definer;

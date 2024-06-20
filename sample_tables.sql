@@ -47,5 +47,11 @@ insert into audit_test.addresses (street)
 VALUES ('Bernauer Str.'),
        ('Alice-und-Hella-Hirsch-Ring');
 
+update audit_test.addresses
+/*_audit {"key":"value"} _audit*/
+set street = 'Bernauer Str' where street = 'Bernauer Str.';
+
+update audit_test.customers /*_audit {"key":"value2"} _audit*/ set score = -100 where id = 'def';
+
 select *
 from audit.history;
